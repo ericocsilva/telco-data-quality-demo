@@ -1,0 +1,137 @@
+resources:
+  jobs:
+    # ------------------------------------------------------------------
+    # One-off: backfill 30 days of history, build the medallion, turn on
+    # UC data quality monitoring and run the DQX-as-code example.
+    # ------------------------------------------------------------------
+    telco_dq_bootstrap:
+      name: "Telco DQ - 1. Bootstrap (seed + pipeline + monitoring)"
+      description: >
+        Run once after `bundle deploy`. Generates 30 days of mock telco data
+        (customers, plans, usage CDRs, invoices) with embedded quality issues, runs the
+        SDP pipeline with a full refresh, enables UC anomaly detection / data profiling,
+        and runs the DQX code-based example.
+      max_concurrent_runs: 1
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "4"
+        - environment_key: dqx
+          spec:
+            client: "4"
+            dependencies:
+              - databricks-labs-dqx==0.16.0
+              - pyyaml
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: landing_schema
+          default: ${resources.schemas.landing.name}
+        - name: bronze_schema
+          default: ${resources.schemas.bronze.name}
+        - name: silver_schema
+          default: ${resources.schemas.silver.name}
+        - name: gold_schema
+          default: ${resources.schemas.gold.name}
+        - name: monitoring_schema
+          default: ${resources.schemas.monitoring.name}
+
+      tasks:
+        - task_key: generate_seed_data
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/data_generator/generate_data.py
+            base_parameters:
+              scenario: seed
+
+        - task_key: run_pipeline_full_refresh
+          depends_on:
+            - task_key: generate_seed_data
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.telco_dq_pipeline.id}
+            full_refresh: true
+
+        - task_key: enable_quality_monitoring
+          depends_on:
+            - task_key: run_pipeline_full_refresh
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/monitoring/enable_quality_monitoring.py
+
+        - task_key: dqx_as_code
+          depends_on:
+            - task_key: run_pipeline_full_refresh
+          environment_key: dqx
+          notebook_task:
+            notebook_path: ../src/dqx/dqx_as_code.py
+
+    # ------------------------------------------------------------------
+    # Recurring: one hourly micro-batch. Run it manually with a different
+    # `scenario` to inject an incident during the demo.
+    # ------------------------------------------------------------------
+    telco_dq_ingest:
+      name: "Telco DQ - 2. Hourly ingest (inject incidents via `scenario`)"
+      description: >
+        Lands one new batch of files and runs the SDP pipeline incrementally.
+        scenario = normal | bad_data_burst | null_spike | volume_drop | schema_drift.
+        skip_entities = comma-separated list (customers,usage_events,invoices) to stage a freshness incident.
+        refresh_profiles = true to refresh the UC data profiles after the pipeline.
+      max_concurrent_runs: 1
+
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?"
+        timezone_id: America/Sao_Paulo
+        pause_status: ${var.ingest_schedule_status}
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "4"
+
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: landing_schema
+          default: ${resources.schemas.landing.name}
+        - name: silver_schema
+          default: ${resources.schemas.silver.name}
+        - name: gold_schema
+          default: ${resources.schemas.gold.name}
+        - name: monitoring_schema
+          default: ${resources.schemas.monitoring.name}
+        - name: scenario
+          default: normal
+        - name: skip_entities
+          default: ""
+        - name: refresh_profiles
+          default: "false"
+
+      tasks:
+        - task_key: generate_batch
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/data_generator/generate_data.py
+
+        - task_key: run_pipeline
+          depends_on:
+            - task_key: generate_batch
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.telco_dq_pipeline.id}
+
+        - task_key: should_refresh_profiles
+          depends_on:
+            - task_key: run_pipeline
+          condition_task:
+            op: EQUAL_TO
+            left: "{{job.parameters.refresh_profiles}}"
+            right: "true"
+
+        - task_key: refresh_profiles
+          depends_on:
+            - task_key: should_refresh_profiles
+              outcome: "true"
+          environment_key: default
+          notebook_task:
+            notebook_path: ../src/monitoring/refresh_profiles.py

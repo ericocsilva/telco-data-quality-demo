@@ -1,0 +1,28 @@
+resources:
+  pipelines:
+    telco_dq_pipeline:
+      name: "Telco DQ - SDP Medallion Pipeline (Expectations)"
+      catalog: ${var.catalog}
+      # Default publishing schema; bronze and gold tables use fully-qualified names
+      schema: ${resources.schemas.silver.name}
+      serverless: true
+      channel: CURRENT
+      continuous: false
+      development: false
+
+      # Publish the event log as a UC table so expectation metrics can be queried with SQL
+      event_log:
+        catalog: ${var.catalog}
+        schema: ${resources.schemas.silver.name}
+        name: sdp_event_log
+
+      libraries:
+        - glob:
+            include: ../src/pipeline/**
+
+      configuration:
+        catalog: ${var.catalog}
+        bronze_schema: ${resources.schemas.bronze.name}
+        silver_schema: ${resources.schemas.silver.name}
+        gold_schema: ${resources.schemas.gold.name}
+        landing_path: /Volumes/${var.catalog}/${resources.schemas.landing.name}/${resources.volumes.raw.name}

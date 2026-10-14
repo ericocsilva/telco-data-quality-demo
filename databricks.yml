@@ -1,0 +1,42 @@
+bundle:
+  name: telco-data-quality-demo
+
+variables:
+  catalog:
+    description: Unity Catalog catalog that hosts the demo schemas
+    default: main
+  landing_schema:
+    description: Schema with the landing volume (raw files)
+    default: telco_dq_landing
+  bronze_schema:
+    description: Raw ingested tables (Auto Loader)
+    default: telco_dq_bronze
+  silver_schema:
+    description: Cleaned / validated tables (SDP expectations)
+    default: telco_dq_silver
+  gold_schema:
+    description: Business aggregates
+    default: telco_dq_gold
+  monitoring_schema:
+    description: Output schema for UC data profiling metric tables
+    default: telco_dq_monitoring
+  dqx_app_sp:
+    description: Application ID of the DQX Studio app service principal (needs SELECT for scheduled runs)
+  dqx_job_sp:
+    description: Application ID of the service principal that runs the DQX Studio task-runner job
+  ingest_schedule_status:
+    description: PAUSED or UNPAUSED for the hourly ingestion job (keep UNPAUSED for a few hours before the demo so anomaly detection learns a pattern)
+    default: UNPAUSED
+
+include:
+  - resources/*.yml
+  # Your workspace / catalog / service principal IDs (git-ignored). See targets.local.yml.example
+  - "*.local.yml"
+
+targets:
+  # No `mode: development` on purpose: development mode would prefix the UC schema
+  # names (dev_<user>_...) and pause schedules, which breaks the demo script.
+  demo:
+    default: true
+    workspace:
+      root_path: ~/.bundle/${bundle.name}/${bundle.target}

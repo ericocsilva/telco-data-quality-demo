@@ -1,0 +1,47 @@
+# DQX rules for <catalog>.telco_dq_silver.usage_events (what passed the SDP expectations)
+# These are checks that row-level SDP expectations cannot express: uniqueness,
+# referential integrity and multi-column business rules.
+# NOTE: replace <catalog> with your catalog before pasting into DQX Studio
+# (dqx_as_code.py does it automatically).
+- name: event_id_unique
+  criticality: error
+  check:
+    function: is_unique
+    arguments:
+      columns: [event_id]
+- name: customer_exists_in_crm
+  criticality: error
+  check:
+    function: foreign_key
+    arguments:
+      columns: [customer_id]
+      ref_columns: [customer_id]
+      ref_table: <catalog>.telco_dq_silver.dim_customers
+- name: cell_id_present
+  criticality: warn
+  check:
+    function: is_not_null
+    arguments:
+      column: cell_id
+- name: valid_device_type
+  criticality: warn
+  check:
+    function: is_in_list
+    arguments:
+      column: device_type
+      allowed: ["'SMARTPHONE'", "'MODEM'", "'TABLET'", "'IOT'"]
+- name: voice_call_has_duration
+  criticality: warn
+  check:
+    function: sql_expression
+    arguments:
+      expression: "event_type <> 'VOICE' OR duration_sec > 0"
+      msg: "VOICE events must have a positive duration"
+- name: data_session_under_10gb
+  criticality: warn
+  check:
+    function: is_in_range
+    arguments:
+      column: data_mb
+      min_limit: 0
+      max_limit: 10240

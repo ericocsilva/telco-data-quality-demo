@@ -1,0 +1,46 @@
+# DQX rules for <catalog>.telco_dq_silver.invoices, including a cross-table business rule.
+# NOTE: replace <catalog> with your catalog before pasting into DQX Studio
+# (dqx_as_code.py does it automatically).
+- name: invoice_customer_exists
+  criticality: error
+  check:
+    function: foreign_key
+    arguments:
+      columns: [customer_id]
+      ref_columns: [customer_id]
+      ref_table: <catalog>.telco_dq_silver.dim_customers
+- name: due_date_after_issue
+  criticality: error
+  check:
+    function: sql_expression
+    arguments:
+      expression: "due_date >= issue_date"
+      msg: "due_date is before issue_date"
+- name: paid_date_after_issue
+  criticality: error
+  check:
+    function: sql_expression
+    arguments:
+      expression: "paid_date IS NULL OR paid_date >= issue_date"
+      msg: "paid_date is before issue_date"
+- name: amount_not_below_plan_fee
+  criticality: warn
+  check:
+    function: sql_query
+    arguments:
+      merge_columns: [invoice_id]
+      msg: "Invoice amount is lower than the customer's plan monthly fee"
+      query: |
+        SELECT i.invoice_id, i.amount_brl < p.monthly_fee_brl AS condition
+        FROM {{ input_view }} i
+        JOIN <catalog>.telco_dq_silver.dim_customers c ON i.customer_id = c.customer_id
+        JOIN <catalog>.telco_dq_silver.plans p ON c.plan_id = p.plan_id
+- name: overdue_rate_below_15pct_per_month
+  criticality: warn
+  check:
+    function: is_aggr_not_greater_than
+    arguments:
+      column: "CASE WHEN status = 'OVERDUE' THEN 1.0 ELSE 0.0 END"
+      aggr_type: avg
+      group_by: [billing_month]
+      limit: 0.15

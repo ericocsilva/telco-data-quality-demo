@@ -1,0 +1,9 @@
+# Copy to targets.local.yml (git-ignored) and fill in your environment.
+targets:
+  demo:
+    workspace:
+      profile: <databricks-cli-profile>        # or host: https://<workspace-url>
+    variables:
+      catalog: <catalog>                       # existing catalog where you can CREATE SCHEMA
+      dqx_app_sp: <dqx-studio-app-sp-application-id>   # Apps -> dqx-studio -> service principal
+      dqx_job_sp: <dqx-task-runner-job-run-as-sp-id>   # run_as of the DQX Studio task-runner job

@@ -1,0 +1,41 @@
+resources:
+  schemas:
+    landing:
+      catalog_name: ${var.catalog}
+      name: ${var.landing_schema}
+      comment: "Telco DQ demo - landing zone (raw files in a UC volume)"
+
+    bronze:
+      catalog_name: ${var.catalog}
+      name: ${var.bronze_schema}
+      comment: "Telco DQ demo - bronze: raw records ingested with Auto Loader"
+      grants: &dqx_grants
+        - principal: ${var.dqx_app_sp}
+          privileges: [USE_SCHEMA, SELECT]
+        - principal: ${var.dqx_job_sp}
+          privileges: [USE_SCHEMA, SELECT]
+
+    silver:
+      catalog_name: ${var.catalog}
+      name: ${var.silver_schema}
+      comment: "Telco DQ demo - silver: validated tables protected by SDP expectations"
+      grants: *dqx_grants
+
+    gold:
+      catalog_name: ${var.catalog}
+      name: ${var.gold_schema}
+      comment: "Telco DQ demo - gold: business aggregates (billing, usage, customer 360)"
+      grants: *dqx_grants
+
+    monitoring:
+      catalog_name: ${var.catalog}
+      name: ${var.monitoring_schema}
+      comment: "Telco DQ demo - output of UC data profiling (profile / drift metric tables)"
+
+  volumes:
+    raw:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.landing.name}
+      name: raw
+      volume_type: MANAGED
+      comment: "Raw JSON / CSV files written by the data generator"
